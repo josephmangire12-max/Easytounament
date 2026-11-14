@@ -1,0 +1,9 @@
+{
+  "name": "easytournament-server",
+  "version": "1.0.0",
+  "description": "EasyTournament backend: accounts, USD wallet ledger, league escrow, automatic prize release",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node test.js" },
+  "engines": { "node": ">=22.13" },
+  "license": "UNLICENSED"
+}
