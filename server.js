@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS complaints(id INTEGER PRIMARY KEY,code TEXT,user_id I
 CREATE TABLE IF NOT EXISTS chat(id INTEGER PRIMARY KEY,code TEXT,user_id INTEGER,author TEXT,body TEXT,created INTEGER);
 CREATE TABLE IF NOT EXISTS withdrawals(id INTEGER PRIMARY KEY,user_id INTEGER,cents INTEGER,method TEXT,dest TEXT,status TEXT DEFAULT 'pending',created INTEGER);
 CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS saved_methods(id INTEGER PRIMARY KEY,user_id INTEGER,provider TEXT,kind TEXT,label TEXT,token TEXT,meta TEXT,created INTEGER,UNIQUE(user_id,token));
 CREATE TABLE IF NOT EXISTS push_subs(id INTEGER PRIMARY KEY,user_id INTEGER,endpoint TEXT UNIQUE,p256dh TEXT,auth TEXT,created INTEGER);
 CREATE TABLE IF NOT EXISTS slots(code TEXT,id TEXT,team TEXT,logo TEXT,user_id INTEGER,PRIMARY KEY(code,id));
 CREATE TABLE IF NOT EXISTS calls(id INTEGER PRIMARY KEY,code TEXT,midx INTEGER,from_id INTEGER,to_id INTEGER,from_name TEXT,to_name TEXT,from_team TEXT,to_team TEXT,lname TEXT,whn TEXT,dur INTEGER,created INTEGER,expires INTEGER,status TEXT,ended INTEGER);
@@ -57,6 +58,8 @@ function backup() {
 }
 setInterval(() => { try { backup(); } catch (e) { console.error('backup failed', e); } }, 6 * 3600 * 1000).unref?.();
 try { db.exec('ALTER TABLE users ADD COLUMN sb_id TEXT'); } catch { }
+try { db.exec('ALTER TABLE users ADD COLUMN stripe_customer TEXT'); } catch { }
+try { db.exec('ALTER TABLE deposits ADD COLUMN save INTEGER'); } catch { }
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_sb ON users(sb_id)');
 for (const col of ['provider TEXT', 'pid TEXT']) { try { db.exec('ALTER TABLE deposits ADD COLUMN ' + col); } catch { } }
 class HttpErr extends Error { constructor(s, m) { super(m); this.s = s; } }
@@ -278,6 +281,7 @@ R('POST', '/api/pin', c => {
   const salt = crypto.randomBytes(16).toString('hex'); run('UPDATE users SET pin=?,pin_salt=?,pin_fail=0 WHERE id=?', scrypt(p, salt), salt, c.u.id); return meOut(get('SELECT * FROM users WHERE id=?', c.u.id));
 });
 // wallet
+function keepMethod(uid, provider, kind, label, token, meta) { try { run('INSERT OR IGNORE INTO saved_methods(user_id,provider,kind,label,token,meta,created) VALUES(?,?,?,?,?,?,?)', uid, provider, kind, str(label, 60), String(token), JSON.stringify(meta || {}), now()); } catch { } }
 async function flwConfirm(ref) {   // asks Flutterwave directly (never trusts the browser or the webhook body), then credits once
   const row = get('SELECT * FROM deposits WHERE ref=?', ref); if (!row) throw new HttpErr(404, 'Unknown payment');
   if (row.status === 'paid') return true;
@@ -285,6 +289,7 @@ async function flwConfirm(ref) {   // asks Flutterwave directly (never trusts th
   const j = await r.json().catch(() => ({})), d = j && j.data;
   if (!r.ok || j.status !== 'success' || !d || d.status !== 'successful' || d.tx_ref !== ref || d.currency !== row.currency || Number(d.amount) + 0.01 < row.amount) return false;
   tx(() => { const x = get('SELECT status FROM deposits WHERE ref=?', ref); if (x.status === 'paid') return; run("UPDATE deposits SET status='paid' WHERE ref=?", ref); move('ext', 'user:' + row.user_id, row.usd, 'deposit', ref, 'Deposit (' + (row.currency === 'TZS' ? 'mobile money' : 'card') + ')'); });
+  if (row.save && d.card && d.card.token) keepMethod(row.user_id, 'flutterwave', 'card', (d.card.type || 'Card') + ' •••• ' + (d.card.last_4digits || '????') + (d.card.expiry ? ' (exp ' + d.card.expiry + ')' : ''), d.card.token, { country: String(d.card.country || '').split(' ').pop() });
   return true;
 }
 let ppTok = { t: '', exp: 0 };
@@ -301,26 +306,48 @@ async function ppConfirm(ref) {   // captures the approved order (or reads it if
   const u = j.purchase_units && j.purchase_units[0], cap = u && u.payments && u.payments.captures && u.payments.captures[0];
   if (j.status !== 'COMPLETED' || !cap || cap.status !== 'COMPLETED' || !cap.amount || cap.amount.currency_code !== 'USD' || Number(cap.amount.value) + 0.001 < row.amount || (u.custom_id && u.custom_id !== ref)) return false;
   tx(() => { const x = get('SELECT status FROM deposits WHERE ref=?', ref); if (x.status === 'paid') return; run("UPDATE deposits SET status='paid' WHERE ref=?", ref); move('ext', 'user:' + row.user_id, row.usd, 'deposit', ref, 'Deposit (PayPal)'); });
+  const pv = j.payment_source && j.payment_source.paypal, vt = pv && pv.attributes && pv.attributes.vault;
+  if (row.save && vt && vt.id && vt.status === 'VAULTED') keepMethod(row.user_id, 'paypal', 'paypal', 'PayPal ' + (pv.email_address || ''), vt.id, {});
   return true;
 }
 R('GET', '/api/wallet/methods', () => ({ methods: methodsList() }), false);
 R('POST', '/api/wallet/deposit', async c => {
-  const a = cents(c.b.amount), route = depositRoute(String(c.b.method || '')), gross = a * (1 + FEE);
   const newRef = () => 'ET-' + crypto.randomBytes(8).toString('hex');
+  if (c.b.saved) {   // one-tap payment with a method the provider stored for this user (PIN required)
+    const sm = get('SELECT * FROM saved_methods WHERE id=? AND user_id=?', +c.b.saved, c.u.id); if (!sm) throw new HttpErr(404, 'Saved payment method not found');
+    const a = cents(c.b.amount), amount = Math.ceil(a * (1 + FEE)) / 100, ref = newRef(); checkPin(c.u, c.b.pin);
+    if (sm.provider === 'paypal' && PP) {
+      const r = await fetch(PPBASE + '/v2/checkout/orders', { method: 'POST', headers: { Authorization: 'Bearer ' + await ppAuth(), 'Content-Type': 'application/json', 'PayPal-Request-Id': ref }, body: JSON.stringify({ intent: 'CAPTURE', purchase_units: [{ reference_id: ref, custom_id: ref, description: 'EasyTournament wallet top-up', amount: { currency_code: 'USD', value: amount.toFixed(2) } }], payment_source: { paypal: { vault_id: sm.token } } }) });
+      const j = await r.json().catch(() => ({})); if (!r.ok || !j.id) throw new HttpErr(502, 'Payment provider error');
+      run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider,pid) VALUES(?,?,?,?,?,?,?,?)', ref, c.u.id, a, 'USD', amount, now(), 'paypal', j.id);
+      { const ok = await ppConfirm(ref); return { ...meOut(get('SELECT * FROM users WHERE id=?', c.u.id)), credited: ok }; }
+    }
+    if (sm.provider === 'flutterwave' && FLW) {
+      run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider) VALUES(?,?,?,?,?,?,?)', ref, c.u.id, a, 'USD', amount, now(), 'flutterwave');
+      const nm = String(c.u.name).split(' '), meta = JSON.parse(sm.meta || '{}');
+      const r = await fetch(FLW_BASE + '/tokenized-charges', { method: 'POST', headers: { Authorization: 'Bearer ' + FLW, 'Content-Type': 'application/json' }, body: JSON.stringify({ token: sm.token, currency: 'USD', country: meta.country || 'US', amount, email: c.u.email, first_name: nm[0], last_name: nm.slice(1).join(' ') || '-', tx_ref: ref }) });
+      const j = await r.json().catch(() => ({})); if (!r.ok || j.status !== 'success') throw new HttpErr(402, 'The card could not be charged. Add it again with a new payment.');
+      { const ok = await flwConfirm(ref); return { ...meOut(get('SELECT * FROM users WHERE id=?', c.u.id)), credited: ok }; }
+    }
+    throw new HttpErr(503, 'This saved payment method is not available');
+  }
+  const a = cents(c.b.amount), route = depositRoute(String(c.b.method || '')), gross = a * (1 + FEE), keep = c.b.save === true ? 1 : 0;
   if (route === 'flutterwave') {
     const cur = c.b.method === 'mobile' ? 'TZS' : 'USD', amount = cur === 'USD' ? Math.ceil(gross) / 100 : Math.ceil(gross / 100 * RATE), ref = newRef();
-    run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider) VALUES(?,?,?,?,?,?,?)', ref, c.u.id, a, cur, amount, now(), 'flutterwave');
+    run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider,save) VALUES(?,?,?,?,?,?,?,?)', ref, c.u.id, a, cur, amount, now(), 'flutterwave', cur === 'USD' ? keep : 0);
     const r = await fetch(FLW_BASE + '/payments', { method: 'POST', headers: { Authorization: 'Bearer ' + FLW, 'Content-Type': 'application/json' }, body: JSON.stringify({ tx_ref: ref, amount, currency: cur, redirect_url: BASE + '/', customer: { email: c.u.email, name: c.u.name }, customizations: { title: 'EasyTournament wallet top-up' }, meta: { user_id: c.u.id } }) });
     const j = await r.json().catch(() => ({})); if (!r.ok || !j.data || !j.data.link) throw new HttpErr(502, 'Payment provider error'); return { url: j.data.link };
   }
   if (route === 'paypal') {
     const amount = Math.ceil(gross) / 100, ref = newRef();
-    const r = await fetch(PPBASE + '/v2/checkout/orders', { method: 'POST', headers: { Authorization: 'Bearer ' + await ppAuth(), 'Content-Type': 'application/json', 'PayPal-Request-Id': ref }, body: JSON.stringify({ intent: 'CAPTURE', purchase_units: [{ reference_id: ref, custom_id: ref, description: 'EasyTournament wallet top-up', amount: { currency_code: 'USD', value: amount.toFixed(2) } }], payment_source: { paypal: { experience_context: { return_url: BASE + '/?pp=1&ref=' + ref, cancel_url: BASE + '/?pp=0', user_action: 'PAY_NOW', shipping_preference: 'NO_SHIPPING', brand_name: 'EasyTournament' } } } }) });
+    const r = await fetch(PPBASE + '/v2/checkout/orders', { method: 'POST', headers: { Authorization: 'Bearer ' + await ppAuth(), 'Content-Type': 'application/json', 'PayPal-Request-Id': ref }, body: JSON.stringify({ intent: 'CAPTURE', purchase_units: [{ reference_id: ref, custom_id: ref, description: 'EasyTournament wallet top-up', amount: { currency_code: 'USD', value: amount.toFixed(2) } }], payment_source: { paypal: { ...(keep ? { attributes: { vault: { store_in_vault: 'ON_SUCCESS', usage_type: 'MERCHANT', customer_type: 'CONSUMER', permit_multiple_payment_tokens: true } } } : {}), experience_context: { return_url: BASE + '/?pp=1&ref=' + ref, cancel_url: BASE + '/?pp=0', user_action: 'PAY_NOW', shipping_preference: 'NO_SHIPPING', brand_name: 'EasyTournament' } } } }) });
     const j = await r.json().catch(() => ({})), link = (j.links || []).find(l => l.rel === 'payer-action' || l.rel === 'approve'); if (!r.ok || !j.id || !link) throw new HttpErr(502, 'Payment provider error');
-    run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider,pid) VALUES(?,?,?,?,?,?,?,?)', ref, c.u.id, a, 'USD', amount, now(), 'paypal', j.id); return { url: link.href };
+    run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider,pid,save) VALUES(?,?,?,?,?,?,?,?,?)', ref, c.u.id, a, 'USD', amount, now(), 'paypal', j.id, keep); return { url: link.href };
   }
   if (route === 'stripe') {
-    const body = new URLSearchParams({ mode: 'payment', 'line_items[0][price_data][currency]': 'usd', 'line_items[0][price_data][product_data][name]': 'EasyTournament wallet top-up', 'line_items[0][price_data][unit_amount]': String(a), 'line_items[0][quantity]': '1', success_url: BASE + '/?paid=1', cancel_url: BASE + '/', client_reference_id: String(c.u.id), 'metadata[user_id]': String(c.u.id), 'metadata[cents]': String(a) });
+    let cust = get('SELECT stripe_customer s FROM users WHERE id=?', c.u.id).s;
+    if (!cust) { const cr = await fetch('https://api.stripe.com/v1/customers', { method: 'POST', headers: { Authorization: 'Bearer ' + STRIPE, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email: c.u.email, name: c.u.name, 'metadata[user_id]': String(c.u.id) }) }), cj = await cr.json().catch(() => ({})); if (cr.ok && cj.id) { cust = cj.id; run('UPDATE users SET stripe_customer=? WHERE id=?', cust, c.u.id); } }
+    const body = new URLSearchParams({ mode: 'payment', 'line_items[0][price_data][currency]': 'usd', 'line_items[0][price_data][product_data][name]': 'EasyTournament wallet top-up', 'line_items[0][price_data][unit_amount]': String(a), 'line_items[0][quantity]': '1', success_url: BASE + '/?paid=1', cancel_url: BASE + '/', client_reference_id: String(c.u.id), 'metadata[user_id]': String(c.u.id), 'metadata[cents]': String(a), ...(cust ? { customer: cust, 'saved_payment_method_options[payment_method_save]': 'enabled' } : {}) });
     const r = await fetch('https://api.stripe.com/v1/checkout/sessions', { method: 'POST', headers: { Authorization: 'Bearer ' + STRIPE, 'Content-Type': 'application/x-www-form-urlencoded' }, body });
     const j = await r.json(); if (!r.ok) throw new HttpErr(502, 'Payment provider error'); return { url: j.url };
   }
@@ -332,6 +359,12 @@ R('POST', '/api/paypal/webhook', async c => {
   const j = await r.json().catch(() => ({})); if (!r.ok || j.verification_status !== 'SUCCESS') throw new HttpErr(400, 'Bad signature');
   const ref = c.b.resource && c.b.resource.custom_id; if (c.b.event_type === 'PAYMENT.CAPTURE.COMPLETED' && ref && get('SELECT 1 x FROM deposits WHERE ref=?', String(ref))) await ppConfirm(String(ref)); return { received: true };
 }, false);
+R('GET', '/api/wallet/saved', c => ({ saved: all('SELECT id,kind,label,provider FROM saved_methods WHERE user_id=? ORDER BY id DESC', c.u.id) }));
+R('DELETE', '/api/wallet/saved/:id', async c => {
+  const sm = get('SELECT * FROM saved_methods WHERE id=? AND user_id=?', +c.p.id, c.u.id); if (!sm) throw new HttpErr(404, 'Not found');
+  if (sm.provider === 'paypal' && PP) { try { await fetch(PPBASE + '/v3/vault/payment-tokens/' + encodeURIComponent(sm.token), { method: 'DELETE', headers: { Authorization: 'Bearer ' + await ppAuth() } }); } catch { } }
+  run('DELETE FROM saved_methods WHERE id=?', sm.id); return { ok: true };
+});
 R('POST', '/api/wallet/deposit/confirm', async c => {
   const row = get('SELECT * FROM deposits WHERE ref=?', String(c.b.ref || '')); if (!row || row.user_id !== c.u.id) throw new HttpErr(404, 'Unknown payment');
   const ok = row.provider === 'paypal' ? await ppConfirm(row.ref) : row.provider === 'flutterwave' ? await flwConfirm(row.ref) : false; return { ...meOut(get('SELECT * FROM users WHERE id=?', c.u.id)), credited: ok };
