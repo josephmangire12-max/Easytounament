@@ -185,7 +185,7 @@ function detail(){var l=Lg();if(!l){det=null;return home()}
   else h+='<div class="card"><b>'+(mon?'💰 Money league':'Normal league')+'</b>'+(mon?'<p class="sub" style="margin:4px 0 0">Entry fee '+N(l.fee)+' · Pot '+N(l.pot)+'</p>':'')+'</div>';
   h+='<h2 style="font-size:18px;margin:14px 0 8px">👥 Players ('+l.players.length+')</h2>';
   l.players.forEach(function(p){h+='<div class="lg" style="align-items:center;padding:10px">'+logo(p.logo,p.team||p.name,40)+'<div class="lb"><b>'+esc(p.name||(p.slot?'Open team':''))+'</b><div class="meta"><span>'+(p.team?'🛡 '+esc(p.team):'No team yet')+'</span>'+(mon?'<span>'+(p.paid?'✓ paid':(p.slot?'waiting for player':'unpaid'))+'</span>':'')+'</div></div>'+(adm&&!fin?'<button class="chip" data-a="team" data-v="'+p.id+'">Team</button>':'')+'</div>'});
-  if(adm&&l.mode&&!fin)h+='<div class="btns"><input class="in" id="pn" placeholder="Player name" maxlength="30"><button class="pri" style="flex:0 0 auto" data-a="addp">'+(mon?'Add team':'Add')+'</button></div>';
+  if(adm&&l.mode&&!fin)h+='<div class="btns"><input class="in" id="pn" placeholder="Player name" maxlength="30"><button class="pri" style="flex:0 0 auto" data-a="addp">'+'Add team'+'</button></div>';
   if(l.mode){h+='<h2 style="font-size:18px;margin:14px 0 8px">'+(fb?'⚽ Matches':'🎯 Games')+'</h2>';
     l.matches.forEach(function(m,i){var a=pl(l,m.h),b=pl(l,m.a);if(!a||!b)return;var d=fin?' disabled':'';h+='<div class="card" style="padding:10px"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1;text-align:right">'+esc(a.team||a.name)+'</b><input class="in sc" type="number" inputmode="numeric" min="0" data-m="'+i+'" data-s="hs" value="'+(m.hs==null?'':m.hs)+'"'+d+'><span>:</span><input class="in sc" type="number" inputmode="numeric" min="0" data-m="'+i+'" data-s="as" value="'+(m.as==null?'':m.as)+'"'+d+'><b style="flex:1">'+esc(b.team||b.name)+'</b></div></div>'});
     if(adm&&!fin)h+='<button class="pri" style="width:100%" data-a="cm">＋ '+(fb?'Create Match':'Create Game')+'</button>';
@@ -286,7 +286,7 @@ function detail(){var l=Lg();if(!l){det=null;return home()}
   h+='<div class="card"><div class="btns" style="margin:0"><input class="in" id="an" placeholder="Write an announcement..." maxlength="120"'+(adm?'':' disabled')+'><button class="pri" style="flex:0 0 52px" data-a="ann" aria-label="Send">➤</button></div>'+l.ann.map(function(a){return '<div style="background:var(--card2);border-radius:12px;padding:10px 12px;margin-top:8px">'+esc(a.t)+'<div class="meta" style="margin-top:4px">'+esc(a.by)+' · '+esc(a.d)+'</div></div>'}).join('')+'</div>';
   h+='<h2 style="font-size:18px;margin:14px 0 8px">👥 Teams ('+l.players.length+')</h2>';
   l.players.forEach(function(p){h+='<div class="lg" style="align-items:center;padding:10px">'+logo(p.logo,p.team||p.name,44)+'<div class="lb"><b>'+esc(p.name||(p.slot?'Open team':''))+'</b><div class="meta"><span>'+(p.team?'🛡 '+esc(p.team):'No team yet')+'</span>'+(mon?'<span>'+(p.paid?'✓ paid':(p.slot?'waiting for player':'unpaid'))+'</span>':'')+'</div></div>'+(adm&&!fin?'<button class="chip" data-a="team" data-v="'+p.id+'">Team</button>':'')+'</div>'});
-  if(adm&&l.mode&&!st&&!fin)h+='<div class="btns"><input class="in" id="pn" placeholder="Player name" maxlength="30"><button class="pri" style="flex:0 0 auto" data-a="addp">'+(mon?'Add team':'Add')+'</button></div><button class="pri" style="width:100%" data-a="gen">Create League</button><p class="note meta" style="margin-top:6px">Fixtures are arranged automatically: '+FM[fm]+'.</p>';
+  if(adm&&l.mode&&!st&&!fin)h+='<div class="btns"><input class="in" id="pn" placeholder="Player name" maxlength="30"><button class="pri" style="flex:0 0 auto" data-a="addp">'+'Add team'+'</button></div><button class="pri" style="width:100%" data-a="gen">Create League</button><p class="note meta" style="margin-top:6px">Fixtures are arranged automatically: '+FM[fm]+'.</p>';
   if(l.mode&&st){
     if(fm==='league')h+=hd('LEAGUE')+tcard(l,'League table',null)+rounds(l,function(m){return m.st==='g'},fin,0);
     if(fm==='group'){h+=hd('GROUP STAGE');(l.groups||[]).forEach(function(g,i){var nm='Group '+String.fromCharCode(65+i);h+=tcard(l,nm,g,'Top 2 advance to the next stage')+rounds(l,function(m){return m.st==='g'&&m.g===i},fin,0)});
@@ -316,7 +316,7 @@ function ovr(l,adm,st,fin){var mon=l.mode==='money',fm=l.fmt||'league',pot=l.pot
   h+='<h2 style="font-size:18px;margin:14px 0 8px">👥 Teams ('+l.players.length+')</h2>';
   l.players.forEach(function(p){h+='<div class="lg" style="align-items:center;padding:10px">'+logo(p.logo,p.team||p.name,44)+'<div class="lb"><b>'+esc(p.name||(p.slot?'Open team':''))+'</b><div class="meta"><span>'+(p.team?'🛡 '+esc(p.team):'No team yet')+'</span>'+(mon?'<span>'+(p.paid?'✓ paid':(p.slot?'waiting for player':'unpaid'))+'</span>':'')+'</div></div>'+(adm&&!fin?'<button class="chip" data-a="team" data-v="'+p.id+'">Edit</button><button class="chip" style="color:#ef4444" data-a="rmp" data-v="'+p.id+'" aria-label="Remove">✕</button>':'')+'</div>'});
   if(!l.players.length)h+='<p class="empty">No teams yet.</p>';
-  if(adm&&l.mode&&!st&&!fin)h+='<div class="btns"><input class="in" id="pn" placeholder="Team / player name" maxlength="30"><button class="pri" style="flex:0 0 auto" data-a="addp">'+(mon?'Add team':'Add')+'</button></div><button class="pri" style="width:100%" data-a="gen">Create League</button><p class="meta" style="margin-top:6px">Fixtures are arranged automatically: '+FM[fm]+'.</p>';
+  if(adm&&l.mode&&!st&&!fin)h+='<div class="btns"><input class="in" id="pn" placeholder="Team / player name" maxlength="30"><button class="pri" style="flex:0 0 auto" data-a="addp">'+'Add team'+'</button></div><button class="pri" style="width:100%" data-a="gen">Create League</button><p class="meta" style="margin-top:6px">Fixtures are arranged automatically: '+FM[fm]+'.</p>';
   return h}
 function mtc(l,adm,st,fin){var fm=l.fmt||'league',dis=fin||!adm,h='';
   if(!st)return '<p class="empty">Matches will appear after the admin presses Create League.</p>';
@@ -644,15 +644,15 @@ var SRVMODE=(typeof SRV!=='undefined');
 function slotsOf(l){return (l.players||[]).filter(function(p){return p.slot})}
 function hasMe(l){return !!pl(l,'me')}
 function renameId(l,a,b){var f=function(x){return x===a?b:x};(l.matches||[]).forEach(function(m){m.h=f(m.h);m.a=m.a?f(m.a):m.a});l.groups=(l.groups||[]).map(function(g){return g.map(f)});(l.fr||[]).forEach(function(r){if(r.pos&&r.pos[a]!==undefined){r.pos[b]=r.pos[a];delete r.pos[a]}});if(l.rk)l.rk=l.rk.map(f)}
-function pickCard(l){var op=slotsOf(l).some(function(p){return p.open});return '<div class="card" style="border-color:var(--acc)"><b>✅ Choose your team</b><p class="sub" style="margin:4px 0 10px">'+(op?'You have paid. Find your team in the list and tap ✓.':'There are no open teams yet. Ask the admin to add your team.')+'</p>'+(op?'<button class="pri" style="width:100%" data-a="spickm">Choose my team</button>':'')+'</div>'}
-function joinCard(l){var mon=l.mode==='money';if(mon&&l.joined)return pickCard(l);if(mon&&!slotsOf(l).length)return '<div class="card"><b>Join this league</b><p class="sub" style="margin:4px 0 0">The admin has not added teams yet. Check back soon.</p></div>';return '<div class="card" style="border-color:var(--acc)"><b>Join this league</b><p class="sub" style="margin:4px 0 10px">'+(mon?'Entry fee '+N(l.fee)+'. Pay first, then find your team and tap ✓.':'Choose your team with ✓ to take part.')+'</p><button class="pri" style="width:100%" data-a="join2">'+(mon?'Pay '+N(l.fee)+' and join':'Join league')+'</button></div>'}
+function pickCard(l){var op=slotsOf(l).some(function(p){return p.open});return '<div class="card" style="border-color:var(--acc)"><b>✅ Choose your team</b><p class="sub" style="margin:4px 0 10px">'+(op?(l.mode==='money'?'You have paid. ':'You have joined. ')+'Find your team in the list and tap ✓.':'There are no open teams yet. Ask the admin to add your team.')+'</p>'+(op?'<button class="pri" style="width:100%" data-a="spickm">Choose my team</button>':'')+'</div>'}
+function joinCard(l){var mon=l.mode==='money',sl=!!l.mode;if(sl&&l.joined)return pickCard(l);if(sl&&!slotsOf(l).length)return '<div class="card"><b>Join this league</b><p class="sub" style="margin:4px 0 0">The admin has not added teams yet. Check back soon.</p></div>';return '<div class="card" style="border-color:var(--acc)"><b>Join this league</b><p class="sub" style="margin:4px 0 10px">'+(mon?'Entry fee '+N(l.fee)+'. Pay first, then find your team and tap ✓.':'Choose your team with ✓ to take part.')+'</p><button class="pri" style="width:100%" data-a="join2">'+(mon?'Pay '+N(l.fee)+' and join':'Join league')+'</button></div>'}
 function slotPick(l){if(!l||!slotsOf(l).length){toast('The admin has not added teams yet');return}
   sheet('<h2>Choose your team</h2><p class="sub">Find your team and tap ✓.</p><div style="max-height:52vh;overflow-y:auto">'+slotsOf(l).map(function(p){var mine=p.id==='me',taken=!p.open&&!mine;return '<div class="lg" style="align-items:center;padding:8px 10px;margin-bottom:8px;opacity:'+(taken?.45:1)+'">'+logo(p.logo,p.team,40)+'<b style="flex:1">'+esc(p.team)+'</b>'+(taken?'<span class="meta">Taken'+(p.name?' by '+esc(p.name):'')+'</span>':'<button class="chip" style="width:42px;justify-content:center;'+(mine?'background:var(--acc);color:#fff':'')+'" data-a="spick" data-v="'+esc(p.id)+'" aria-label="Select '+esc(p.team)+'">✓</button>')+'</div>'}).join('')+'</div>')}
-var _pt2=pickTeam;pickTeam=function(id){var l=Lg();if(l&&l.mode==='money'){slotPick(l);return}_pt2(id)};
+var _pt2=pickTeam;pickTeam=function(id){var l=Lg();if(l&&(l.mode==='money'||slotsOf(l).length)){slotPick(l);return}_pt2(id)};
 var _rk2=rankOf;rankOf=function(l){var r=_rk2(l);if(!r||l.mode!=='money')return r;r=r.filter(function(p){return !p.slot||!p.open});return r.length?r:null};
 function fmtWhen(w){if(!w)return '';var d=new Date(w);return isNaN(d)?w:d.toLocaleString('en-GB',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
 function durCard(l){return '<div class="card"><b>⏱ Match settings</b><label class="field" for="dur">Match duration (minutes)</label><div class="btns" style="margin:0"><input class="in" id="dur" type="number" inputmode="numeric" min="1" max="180" value="'+(l.dur||'')+'" placeholder="e.g. 10"><button class="pri" style="flex:0 0 auto" data-a="durs">Save</button></div><p class="meta" style="margin-top:6px">Set a kickoff time for each match in the Matches tab.</p></div>'}
-var _o5=ovr;ovr=function(l,adm,st,fin){var pre='';if(st&&l.mode==='money'&&l.joined&&!hasMe(l)&&!fin)pre+=pickCard(l);if(adm&&!fin)pre+=durCard(l);return pre+_o5(l,adm,st,fin)};
+var _o5=ovr;ovr=function(l,adm,st,fin){var pre='';if(st&&l.mode&&l.joined&&!hasMe(l)&&!fin)pre+=pickCard(l);if(adm&&!fin)pre+=durCard(l);return pre+_o5(l,adm,st,fin)};
 var _mr4=mrow;mrow=function(l,m,i,dis){var h=_mr4(l,m,i,dis);if(!h||m.bye)return h;
   var a=pl(l,m.h),b=m.a?pl(l,m.a):null,done=m.hs!=null&&m.as!=null,meA=a&&a.id==='me',opp=meA?b:a,ok=(meA||(b&&b.id==='me'))&&!done&&l.st==='Active'&&opp&&!opp.open,x='';
   if(m.when||l.dur)x+='<div class="meta" style="margin-top:6px">'+(m.when?'🕒 '+esc(fmtWhen(m.when)):'')+(m.when&&l.dur?' · ':'')+(l.dur?'⏱ '+l.dur+' min':'')+'</div>';
@@ -672,11 +672,11 @@ var CB={start:function(l,i){var m=l.matches[i],a=pl(l,m.h),b=pl(l,m.a),meA=a&&a.
     ringing('Calling '+esc(opp.team||opp.name)+'...','Demo: real players are rung in the online version',t,'<button class="chip" data-a="ccancel">Cancel</button>',end);
     var w=setInterval(function(){if(Date.now()>=end){clearInterval(w);if($('call')&&$('call').style.display!=='none'){callEnd();timeSheet(info,'No answer yet. Here is the match time:')}}},300)},
   cancel:function(){callEnd()}};
-window.addEventListener('click',function(e){if(SRVMODE||e.cancelBubble)return;var b=e.target.closest&&e.target.closest('[data-a]');if(!b)return;var a=b.dataset.a,l=det&&Lg();if(!l||l.mode!=='money')return;
+window.addEventListener('click',function(e){if(SRVMODE||e.cancelBubble)return;var b=e.target.closest&&e.target.closest('[data-a]');if(!b)return;var a=b.dataset.a,l=det&&Lg();if(!l||!l.mode)return;
   if(a==='addp'){e.stopPropagation();var nm=($('pn').value||'').trim();if(!nm)return;if(l.started||l.matches.length){toast('Teams cannot be added after fixtures are created');return}if(slotsOf(l).some(function(p){return p.team.toLowerCase()===nm.toLowerCase()})){toast('That team already exists');return}l.players.push({id:'s'+Date.now(),name:'',team:nm,logo:'',slot:1,open:true,paid:false});l.p=String(l.players.length);save();render()}
-  else if(a==='join2'){e.stopPropagation();if(!slotsOf(l).some(function(p){return p.open})){toast('No open teams left');return}if(D.coins<l.fee){toast('Not enough balance. Deposit in Market');return}pinGate(function(){if(D.coins<l.fee)return;D.coins=cr(D.coins-l.fee);l.pot=(l.pot||0)+l.fee;D.tx.unshift({t:'League fee: '+l.n,a:-l.fee,m:'Wallet',d:nw()});l.joined=true;save();close();render();slotPick(l)})}},true);
+  else if(a==='join2'){if(l.mode!=='money'&&!slotsOf(l).length)return;e.stopPropagation();if(!slotsOf(l).some(function(p){return p.open})){toast('No open teams left');return}if(l.mode!=='money'){l.joined=true;save();close();render();slotPick(l);return}if(D.coins<l.fee){toast('Not enough balance. Deposit in Market');return}pinGate(function(){if(D.coins<l.fee)return;D.coins=cr(D.coins-l.fee);l.pot=(l.pot||0)+l.fee;D.tx.unshift({t:'League fee: '+l.n,a:-l.fee,m:'Wallet',d:nw()});l.joined=true;save();close();render();slotPick(l)})}},true);
 document.addEventListener('click',function(e){var b=e.target.closest('[data-a]');if(!b)return;var a=b.dataset.a,l=det&&Lg();
-  if(a==='mmoney'&&!SRVMODE&&l&&l.mode==='money'){l.players=l.players.filter(function(p){return p.id!=='me'});l.joined=true;save();close();render()}
+  if((a==='mmoney'||a==='mfree')&&!SRVMODE&&l&&l.mode){l.players=l.players.filter(function(p){return p.id!=='me'});l.joined=true;save();close();render()}
   else if(a==='spick'&&!SRVMODE&&l){var t=l.players.filter(function(p){return p.id===b.dataset.v})[0];if(!t||!t.slot)return;if(!t.open&&t.id!=='me'){toast('That team is taken');return}if(l.started&&hasMe(l)){toast('Your team is locked once fixtures are created');return}
     var old=pl(l,'me');if(old&&old.slot&&old!==t){renameId(l,'me',old.sid);old.id=old.sid;old.open=true;old.name='';old.paid=false}
     if(t.id!=='me'){t.sid=t.id;renameId(l,t.id,'me');t.id='me';t.name=D.name;t.open=false;t.paid=true;t.pd=nw()}save();close();render();toast('Team selected: '+t.team)}
@@ -724,13 +724,13 @@ function pinSetup(cb){SPC=cb||null;sheet('<h2>'+(D.pin?'Change PIN':'Set PIN')+'
 var INT={
   mnew2:function(){var n=$('mn').value.trim();if(!n){toast('Enter a name');return}var g=$('mg').value,dd=$('md').value;
     api('POST','/api/leagues',{n:n,g:g,d:dd?new Date(dd).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'TBA',rules:$('mr').value.trim(),fmt:kind(g)==='ffa'?'ffa':$('mf').value}).then(function(v){adopt(v);close();hm='mine';det=v.c;ds='ov';render()}).catch(fail)},
-  mfree:function(b,l){api('POST','/api/leagues/'+l.c+'/mode',{mode:'free'}).then(function(v){adopt(v);render();pickTeam('me')}).catch(fail)},
+  mfree:function(b,l){api('POST','/api/leagues/'+l.c+'/mode',{mode:'free'}).then(function(v){adopt(v);render()}).catch(fail)},
   mmoney:function(b,l){var f=parseFloat($('fee').value);if(!(f>=1)){toast('Enter an entry fee of at least $1');return}askPin(function(pin){api('POST','/api/leagues/'+l.c+'/mode',{mode:'money',fee:f,pin:pin}).then(function(v){adopt(v);return refreshMe().then(function(){render()})}).catch(fail)})},
   join2:function(b,l){var go=function(pin){api('POST','/api/leagues/'+l.c+'/join',{pin:pin}).then(function(v){adopt(v);return refreshMe().then(function(){close();render();pickTeam('me')})}).catch(fail)};if(l.mode==='money')askPin(go);else go()},
   mjoin:function(){var k=($('mc').value||'').trim().toUpperCase();if(!k)return;api('GET','/api/leagues/'+k).then(function(v){adopt(v);close();det=v.c;ds='ov';render()}).catch(fail)},
-  addp:function(b,l){var nm=$('pn').value.trim();if(!nm)return;if(l.mode==='money'){api('POST','/api/leagues/'+l.c+'/slots',{team:nm}).then(function(v){adopt(v);render()}).catch(fail);return}l.players.push({id:'p'+Date.now(),name:nm,paid:true});l.p=String(l.players.length);save();render()},
+  addp:function(b,l){var nm=$('pn').value.trim();if(!nm)return;if(l.mode){api('POST','/api/leagues/'+l.c+'/slots',{team:nm}).then(function(v){adopt(v);render()}).catch(fail);return}l.players.push({id:'p'+Date.now(),name:nm,paid:true});l.p=String(l.players.length);save();render()},
   rmp:function(b,l){var id=b.dataset.v;if(l.started||l.matches.length){toast('Cannot remove teams after fixtures are created');return}
-    if(l.mode==='money'||/^(u\d+|me)$/.test(id))api('POST','/api/leagues/'+l.c+'/remove',{id:id}).then(function(v){adopt(v);return refreshMe().then(function(){render();toast('Team removed. Fee refunded.')})}).catch(fail);
+    if(l.mode||/^(u\d+|me)$/.test(id))api('POST','/api/leagues/'+l.c+'/remove',{id:id}).then(function(v){adopt(v);return refreshMe().then(function(){render();toast('Team removed. Fee refunded.')})}).catch(fail);
     else{l.players=l.players.filter(function(x){return x.id!==id});save();render()}},
   cmpok:function(b,l){var t=($('ct').value||'').trim();if(!t)return;api('POST','/api/leagues/'+l.c+'/complaint',{text:t}).then(function(v){adopt(v);close();render();toast('Complaint sent')}).catch(fail)},
   sim:function(){toast('Prizes are released automatically by the server')},sres:function(){toast('Only support can resolve complaints')},
@@ -856,22 +856,12 @@ var _nl=newL;newL=function(){_nl();var b=document.querySelector('#sheet [data-a=
 document.addEventListener('change',function(e){if(e.target.id==='mt'){var w=$('mfw');if(w)w.style.display=e.target.value==='money'?'':'none'}});
 INT.mnew2=function(){var n=$('mn').value.trim();if(!n){toast('Enter a name');return}var typ=($('mt')||{}).value||'free',fee=parseFloat(($('mfee')||{}).value);if(typ==='money'&&!(fee>=1)){toast('Enter an entry fee of at least $1');return}var g=$('mg').value,dd=$('md').value;
   api('POST','/api/leagues',{n:n,g:g,d:dd?new Date(dd).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'TBA',rules:$('mr').value.trim(),fmt:kind(g)==='ffa'?'ffa':$('mf').value}).then(function(v){adopt(v);close();hm='mine';det=v.c;ds='ov';render();
-    if(typ==='free')return api('POST','/api/leagues/'+v.c+'/mode',{mode:'free'}).then(function(v2){adopt(v2);render();pickTeam('me')});
+    if(typ==='free')return api('POST','/api/leagues/'+v.c+'/mode',{mode:'free'}).then(function(v2){adopt(v2);render()});
     askPin(function(pin){api('POST','/api/leagues/'+v.c+'/mode',{mode:'money',fee:fee,pin:pin}).then(function(v2){adopt(v2);return refreshMe().then(function(){render()})}).catch(fail)})}).catch(fail)};
 
 document.addEventListener("input",function(e){if(e.target.id==="hs"){hs=e.target.value;$("hl").innerHTML=list()}});
 render();
 })();
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyBUtnqmAUcrcO5ZbcyRHGKW1KUWxj1IWEs",
-  authDomain: "questions-ai-70674.firebaseapp.com",
-  projectId: "questions-ai-70674",
-  storageBucket: "questions-ai-70674.firebasestorage.app",
-  messagingSenderId: "509850129612",
-  appId: "1:509850129612:web:f3cf36e22609558bc91e69",
-  measurementId: "G-P9P8HH944S"
-};
 </script>
 </body>
 </html>

@@ -6,22 +6,22 @@ const E = process.env;
 const PORT = +E.PORT || 3000, DATA = E.DATA_DIR || path.join(__dirname, 'data');
 const DEMO = E.DEMO_MONEY === '1';                       // test deposits without Stripe (NEVER in production)
 const REVIEW_MS = +E.REVIEW_MS || 24 * 3600 * 1000;      // complaint window before prizes are released
-const TICK_MS = +E.TICK_MS || 30000, BASE = (E.PUBLIC_URL || '').replace(/\/$/, '');
-const SUPPORT = E.SUPPORT_KEY || '', STRIPE = E.STRIPE_SECRET_KEY || '', WH = E.STRIPE_WEBHOOK_SECRET || '';
+const TICK_MS = +E.TICK_MS || 30000, BASE = (E.PUBLIC_URL || '').trim().replace(/\/$/, '');
+const SUPPORT = (E.SUPPORT_KEY || '').trim(), STRIPE = (E.STRIPE_SECRET_KEY || '').trim(), WH = (E.STRIPE_WEBHOOK_SECRET || '').trim();
 const CALL_MS = +E.CALL_MS || 15000;
-const SB_URL = (E.SUPABASE_URL || '').replace(/\/$/, ''), SB_KEY = E.SUPABASE_PUBLISHABLE_KEY || '', JWKS_URL = E.SUPABASE_JWKS_URL || (SB_URL ? SB_URL + '/auth/v1/.well-known/jwks.json' : '');
+const SB_URL = ((E.SUPABASE_URL || '').trim()).replace(/\/$/, ''), SB_KEY = (E.SUPABASE_PUBLISHABLE_KEY || '').trim(), JWKS_URL = E.SUPABASE_JWKS_URL || (SB_URL ? SB_URL + '/auth/v1/.well-known/jwks.json' : '');
 const AUTH_LOCAL = E.AUTH_LOCAL !== undefined ? E.AUTH_LOCAL === '1' : !SB_URL;      // local email+password only when Supabase is not configured
 const ADS_CLIENT = E.ADSENSE_CLIENT || '', ADS_SLOT = E.ADSENSE_SLOT || '';
-const FLW = E.FLW_SECRET_KEY || '', FLW_HASH = E.FLW_SECRET_HASH || '', FLW_BASE = (E.FLW_API_BASE || 'https://api.flutterwave.com/v3').replace(/\/$/, '');
+const FLW = (E.FLW_SECRET_KEY || '').trim(), FLW_HASH = (E.FLW_SECRET_HASH || '').trim(), FLW_BASE = (E.FLW_API_BASE || 'https://api.flutterwave.com/v3').replace(/\/$/, '');
 const RATE = +E.USD_TZS_RATE || 0, FEE = Math.max(0, +E.DEPOSIT_FEE_PCT || 0) / 100;   // RATE: TZS per 1 USD (include your margin). FEE: optional % added to what the payer is charged
-const PPID = E.PAYPAL_CLIENT_ID || '', PPSEC = E.PAYPAL_CLIENT_SECRET || '', PPBASE = (E.PAYPAL_API_BASE || 'https://api-m.paypal.com').replace(/\/$/, ''), PPWH = E.PAYPAL_WEBHOOK_ID || '', PP = !!(PPID && PPSEC);
+const PPID = (E.PAYPAL_CLIENT_ID || '').trim(), PPSEC = (E.PAYPAL_CLIENT_SECRET || '').trim(), PPBASE = (E.PAYPAL_API_BASE || 'https://api-m.paypal.com').trim().replace(/\/$/, ''), PPWH = (E.PAYPAL_WEBHOOK_ID || '').trim(), PP = !!(PPID && PPSEC);
 function methodsList() {   // what the deposit screen may offer, based on which providers are configured
-  if (E.PAY_PROVIDER === 'demo' || (DEMO && !FLW && !STRIPE && !PP)) return [{ id: 'demo', label: 'Test deposit (demo)' }];
-  const m = []; if (PP) m.push({ id: 'paypal', label: 'PayPal (cards, and Google Pay where available)' });
+  if (E.PAY_PROVIDER === 'demo') return [{ id: 'demo', label: 'Test deposit (demo money)' }];
+  const m = []; if (DEMO) m.push({ id: 'demo', label: 'Test deposit (demo money, no real payment)' }); if (PP) m.push({ id: 'paypal', label: 'PayPal (cards, and Google Pay where available)' });
   if (FLW || STRIPE) m.push({ id: 'card', label: 'Visa / Mastercard' }); if (FLW && RATE) m.push({ id: 'mobile', label: 'Mobile money (Tanzania, TZS)' }); return m;
 }
 function depositRoute(m) {
-  if (E.PAY_PROVIDER === 'demo') return 'demo'; if (m === 'paypal' && PP) return 'paypal'; if (m === 'mobile' && FLW && RATE) return 'flutterwave';
+  if (E.PAY_PROVIDER === 'demo' || (m === 'demo' && DEMO)) return 'demo'; if (m === 'paypal' && PP) return 'paypal'; if (m === 'mobile' && FLW && RATE) return 'flutterwave';
   if (m === 'card' && FLW) return 'flutterwave'; if (m === 'card' && STRIPE) return 'stripe'; if (DEMO && !FLW && !STRIPE && !PP) return 'demo';
   throw new HttpErr(503, 'This payment method is not available yet');
 }
@@ -164,16 +164,16 @@ const needSigned = u => { if (!u.sig_at) throw new HttpErr(403, 'Sign the agreem
 const cid = uid => i => i === 'u' + uid ? 'me' : i;
 const sidf = uid => i => i === 'me' ? 'u' + uid : String(i);
 const mySlot = (code, uid) => (get('SELECT id FROM slots WHERE code=? AND user_id=?', code, uid) || {}).id;
-const meId = (r, uid) => r.mode === 'money' ? mySlot(r.code, uid) : 'u' + uid;           // this user's player id inside the league
+const meId = (r, uid) => r.mode ? mySlot(r.code, uid) : 'u' + uid;           // this user's player id inside the league
 const sidf2 = (r, uid) => i => i === 'me' ? (meId(r, uid) || 'u' + uid) : String(i);
-const userOf = (r, id) => r.mode === 'money' ? (get('SELECT user_id u FROM slots WHERE code=? AND id=?', r.code, id) || {}).u : (/^u\d+$/.test(String(id)) ? +String(id).slice(1) : undefined);
-const teamOf = (r, id) => { if (r.mode === 'money') return (get('SELECT team FROM slots WHERE code=? AND id=?', r.code, id) || {}).team || ''; const m = get('SELECT team,display FROM members WHERE code=? AND user_id=?', r.code, +String(id).slice(1)); return m ? (m.team || m.display) : ''; };
+const userOf = (r, id) => r.mode ? (get('SELECT user_id u FROM slots WHERE code=? AND id=?', r.code, id) || {}).u : (/^u\d+$/.test(String(id)) ? +String(id).slice(1) : undefined);
+const teamOf = (r, id) => { if (r.mode) return (get('SELECT team FROM slots WHERE code=? AND id=?', r.code, id) || {}).team || ''; const m = get('SELECT team,display FROM members WHERE code=? AND user_id=?', r.code, +String(id).slice(1)); return m ? (m.team || m.display) : ''; };
 function isMember(code, uid) { return !!get('SELECT 1 x FROM members WHERE code=? AND user_id=?', code, uid); }
 function view(r, uid, mode) {   // mode: 'light' | 'full' | 'public'
-  const d = JSON.parse(r.data), ms = all('SELECT * FROM members WHERE code=?', r.code), slots = r.mode === 'money' ? all('SELECT * FROM slots WHERE code=? ORDER BY rowid', r.code) : [], mine = r.mode === 'money' ? (slots.find(x => x.user_id === uid) || {}).id : 'u' + uid, c = i => (mine && i === mine) ? 'me' : i;
+  const d = JSON.parse(r.data), ms = all('SELECT * FROM members WHERE code=?', r.code), slots = r.mode ? all('SELECT * FROM slots WHERE code=? ORDER BY rowid', r.code) : [], mine = r.mode ? (slots.find(x => x.user_id === uid) || {}).id : 'u' + uid, c = i => (mine && i === mine) ? 'me' : i;
   const isA = r.admin_id === uid, isM = ms.some(m => m.user_id === uid), priv = mode !== 'public' && (isA || isM);
   const st = r.status === 'review' ? 'Review' : r.status === 'finished' ? 'Finished' : r.status === 'cancelled' ? 'Cancelled' : (d.started ? 'Active' : 'Upcoming');
-  const players = r.mode === 'money' ? slots.map(x => { const m = ms.find(y => y.user_id === x.user_id); return { id: c(x.id), name: m ? m.display : '', team: x.team, logo: x.logo || '', paid: !!x.user_id, pd: m && m.paid_at ? fmtD(m.paid_at) : '', slot: 1, open: !x.user_id }; }) : ms.map(m => ({ id: c('u' + m.user_id), name: m.display, team: m.team || '', logo: m.logo || '', paid: !!m.paid, pd: m.paid_at ? fmtD(m.paid_at) : '' })).concat(d.players || []);
+  const players = r.mode ? slots.map(x => { const m = ms.find(y => y.user_id === x.user_id); return { id: c(x.id), name: m ? m.display : '', team: x.team, logo: x.logo || '', paid: !!x.user_id, pd: m && m.paid_at ? fmtD(m.paid_at) : '', slot: 1, open: !x.user_id }; }) : ms.map(m => ({ id: c('u' + m.user_id), name: m.display, team: m.team || '', logo: m.logo || '', paid: !!m.paid, pd: m.paid_at ? fmtD(m.paid_at) : '' })).concat(d.players || []);
   const o = { n: d.n, c: r.code, g: d.g, d: d.d, rules: d.rules || '', fmt: d.fmt || 'league', logo: d.logo || '', st, p: String(players.length), admin: isA && mode !== 'public' ? 1 : 0, mine: priv ? 1 : 0, mode: r.mode || undefined, started: !!d.started, ko: d.ko || 0, shared: true, joined: isM, dur: d.dur || 0, players, relAt: r.review_at || 0 };
   if (r.mode === 'money') { o.fee = r.fee / 100; o.pot = bal('league:' + r.code) / 100; }
   if (r.rk && r.status === 'finished') { o.rk = JSON.parse(r.rk).map(i => { if (r.mode === 'money') { const x = slots.find(y => 'u' + y.user_id === i); return x ? c(x.id) : i; } return c(i); }); o.finAt = r.review_at || r.created; }
@@ -210,7 +210,7 @@ function saveLeague(r, b, uid) {
     d.groups = (Array.isArray(b.groups) ? b.groups : []).slice(0, 16).map(g => (Array.isArray(g) ? g : []).slice(0, 64).map(gid));
     d.matches = (Array.isArray(b.matches) ? b.matches : []).slice(0, 600).map(m => ({ h: gid(m.h), a: m.a ? gid(m.a) : null, hs: num(m.hs), as: num(m.as), r: Math.max(1, Math.min(99, m.r | 0)), st: m.st === 'ko' ? 'ko' : 'g', g: m.g === undefined ? undefined : m.g | 0, bye: m.bye ? 1 : undefined, ev: evs(m.ev), when: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(m.when || '')) ? m.when : undefined }));
     d.fr = (Array.isArray(b.fr) ? b.fr : []).slice(0, 60).map(f => ({ pos: Object.fromEntries(Object.entries(f && f.pos || {}).slice(0, 64).map(([k, v]) => [gid(k), Math.max(1, Math.min(64, v | 0))])) }));
-    d.players = r.mode === 'money' ? [] : (Array.isArray(b.players) ? b.players : []).filter(p => /^p\d+$/.test(String(p.id))).slice(0, 64).map(p => ({ id: String(p.id), name: str(p.name, 30), team: str(p.team, 30), logo: okLogo(p.logo) }));
+    d.players = r.mode ? [] : (Array.isArray(b.players) ? b.players : []).filter(p => /^p\d+$/.test(String(p.id))).slice(0, 64).map(p => ({ id: String(p.id), name: str(p.name, 30), team: str(p.team, 30), logo: okLogo(p.logo) }));
     if (d.started && r.status === 'open') run("UPDATE leagues SET status='active' WHERE code=?", r.code);
   }
   for (const p of Array.isArray(b.players) ? b.players : []) if (sid(p.id) === 'u' + uid && isMember(r.code, uid)) run('UPDATE members SET team=?,logo=? WHERE code=? AND user_id=?', str(p.team, 30), okLogo(p.logo), r.code, uid);
@@ -248,7 +248,7 @@ const routes = [];
 const R = (m, p, fn, auth = true) => routes.push({ m, re: new RegExp('^' + p.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), fn, auth });
 const meOut = u => ({ id: u.id, name: u.name, email: u.email, hasPin: !!u.pin, sig: u.sig_at ? { n: u.sig_name, d: fmtD(u.sig_at) } : null, balance: bal('user:' + u.id) / 100,
   tx: all('SELECT * FROM ledger WHERE account=? ORDER BY id DESC LIMIT 60', 'user:' + u.id).map(t => ({ t: t.note, a: t.cents / 100, m: t.kind, d: fmtD(t.created) })) });
-R('GET', '/api/health', () => ({ ok: true, payments: methodsList().map(x => x.id), support: !!SUPPORT, production: PROD }), false);
+R('GET', '/api/health', c => ({ ok: true, payments: methodsList().map(x => x.id), paypal: PP ? (PPBASE.includes('sandbox') ? 'sandbox' : 'live') : 'off', returnUrlBase: BASE || (String(c.req.headers['x-forwarded-proto'] || 'http').split(',')[0] + '://' + c.req.headers.host), support: !!SUPPORT, production: PROD }), false);
 R('POST', '/api/signup', c => {
   if (!AUTH_LOCAL) throw new HttpErr(404, 'Use the sign-in page'); limit(c.ip); const e = str(c.b.email, 120).toLowerCase(), n = str(c.b.name, 40), p = String(c.b.password || '');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new HttpErr(400, 'Enter a valid email'); if (n.length < 2) throw new HttpErr(400, 'Enter your name'); if (p.length < 8) throw new HttpErr(400, 'Password needs 8+ characters');
@@ -296,7 +296,7 @@ let ppTok = { t: '', exp: 0 };
 async function ppAuth() {
   if (ppTok.exp > now() + 60000) return ppTok.t;
   const r = await fetch(PPBASE + '/v1/oauth2/token', { method: 'POST', headers: { Authorization: 'Basic ' + Buffer.from(PPID + ':' + PPSEC).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=client_credentials' });
-  const j = await r.json().catch(() => ({})); if (!r.ok || !j.access_token) throw new HttpErr(502, 'Payment provider error'); ppTok = { t: j.access_token, exp: now() + (j.expires_in || 300) * 1000 }; return ppTok.t;
+  const j = await r.json().catch(() => ({})); if (!r.ok || !j.access_token) { console.error('PayPal sign-in failed:', r.status, JSON.stringify(j).slice(0, 300)); throw new HttpErr(502, 'PayPal rejected the server keys. Check PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET and PAYPAL_API_BASE (sandbox keys need https://api-m.sandbox.paypal.com).'); } ppTok = { t: j.access_token, exp: now() + (j.expires_in || 300) * 1000 }; return ppTok.t;
 }
 async function ppConfirm(ref) {   // captures the approved order (or reads it if already captured), verifies amount/currency, credits once
   const row = get('SELECT * FROM deposits WHERE ref=?', ref); if (!row || row.provider !== 'paypal') throw new HttpErr(404, 'Unknown payment'); if (row.status === 'paid') return true;
@@ -331,23 +331,25 @@ R('POST', '/api/wallet/deposit', async c => {
     }
     throw new HttpErr(503, 'This saved payment method is not available');
   }
-  const a = cents(c.b.amount), route = depositRoute(String(c.b.method || '')), gross = a * (1 + FEE), keep = c.b.save === true ? 1 : 0;
+  const a = cents(c.b.amount), route = depositRoute(String(c.b.method || '')), gross = a * (1 + FEE), keep = c.b.save === true ? 1 : 0, origin = BASE || ((c.req.headers['x-forwarded-proto'] || 'http').split(',')[0] + '://' + c.req.headers.host);
   if (route === 'flutterwave') {
     const cur = c.b.method === 'mobile' ? 'TZS' : 'USD', amount = cur === 'USD' ? Math.ceil(gross) / 100 : Math.ceil(gross / 100 * RATE), ref = newRef();
     run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider,save) VALUES(?,?,?,?,?,?,?,?)', ref, c.u.id, a, cur, amount, now(), 'flutterwave', cur === 'USD' ? keep : 0);
-    const r = await fetch(FLW_BASE + '/payments', { method: 'POST', headers: { Authorization: 'Bearer ' + FLW, 'Content-Type': 'application/json' }, body: JSON.stringify({ tx_ref: ref, amount, currency: cur, redirect_url: BASE + '/', customer: { email: c.u.email, name: c.u.name }, customizations: { title: 'EasyTournament wallet top-up' }, meta: { user_id: c.u.id } }) });
-    const j = await r.json().catch(() => ({})); if (!r.ok || !j.data || !j.data.link) throw new HttpErr(502, 'Payment provider error'); return { url: j.data.link };
+    const r = await fetch(FLW_BASE + '/payments', { method: 'POST', headers: { Authorization: 'Bearer ' + FLW, 'Content-Type': 'application/json' }, body: JSON.stringify({ tx_ref: ref, amount, currency: cur, redirect_url: origin + '/', customer: { email: c.u.email, name: c.u.name }, customizations: { title: 'EasyTournament wallet top-up' }, meta: { user_id: c.u.id } }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok || !j.data || !j.data.link) { console.error('Flutterwave could not create the payment:', r.status, JSON.stringify(j).slice(0, 600)); throw new HttpErr(502, 'The card payment could not be started. Check the Flutterwave settings on the server.'); } return { url: j.data.link };
   }
   if (route === 'paypal') {
     const amount = Math.ceil(gross) / 100, ref = newRef();
-    const r = await fetch(PPBASE + '/v2/checkout/orders', { method: 'POST', headers: { Authorization: 'Bearer ' + await ppAuth(), 'Content-Type': 'application/json', 'PayPal-Request-Id': ref }, body: JSON.stringify({ intent: 'CAPTURE', purchase_units: [{ reference_id: ref, custom_id: ref, description: 'EasyTournament wallet top-up', amount: { currency_code: 'USD', value: amount.toFixed(2) } }], payment_source: { paypal: { ...(keep ? { attributes: { vault: { store_in_vault: 'ON_SUCCESS', usage_type: 'MERCHANT', customer_type: 'CONSUMER', permit_multiple_payment_tokens: true } } } : {}), experience_context: { return_url: BASE + '/?pp=1&ref=' + ref, cancel_url: BASE + '/?pp=0', user_action: 'PAY_NOW', shipping_preference: 'NO_SHIPPING', brand_name: 'EasyTournament' } } } }) });
-    const j = await r.json().catch(() => ({})), link = (j.links || []).find(l => l.rel === 'payer-action' || l.rel === 'approve'); if (!r.ok || !j.id || !link) throw new HttpErr(502, 'Payment provider error');
-    run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider,pid,save) VALUES(?,?,?,?,?,?,?,?,?)', ref, c.u.id, a, 'USD', amount, now(), 'paypal', j.id, keep); return { url: link.href };
+    const mk = async vault => fetch(PPBASE + '/v2/checkout/orders', { method: 'POST', headers: { Authorization: 'Bearer ' + await ppAuth(), 'Content-Type': 'application/json', 'PayPal-Request-Id': ref + (vault ? '-v' : '') }, body: JSON.stringify({ intent: 'CAPTURE', purchase_units: [{ reference_id: ref, custom_id: ref, description: 'EasyTournament wallet top-up', amount: { currency_code: 'USD', value: amount.toFixed(2) } }], payment_source: { paypal: { ...(vault ? { attributes: { vault: { store_in_vault: 'ON_SUCCESS', usage_type: 'MERCHANT', customer_type: 'CONSUMER', permit_multiple_payment_tokens: true } } } : {}), experience_context: { return_url: origin + '/?pp=1&ref=' + ref, cancel_url: origin + '/?pp=0', user_action: 'PAY_NOW', shipping_preference: 'NO_SHIPPING', brand_name: 'EasyTournament' } } } }) });
+    let useVault = !!keep, r = await mk(useVault);
+    if (!r.ok && useVault) { console.error('PayPal refused to save the payer (is Vault enabled?). Retrying without saving.', r.status); useVault = false; r = await mk(false); }
+    const j = await r.json().catch(() => ({})), link = (j.links || []).find(l => l.rel === 'payer-action' || l.rel === 'approve'); if (!r.ok || !j.id || !link) { console.error('PayPal could not create the order:', r.status, JSON.stringify(j).slice(0, 600)); const d0 = (j.details && j.details[0]) || {}; throw new HttpErr(502, 'PayPal could not start the payment: ' + (d0.description || d0.issue || j.message || j.name || 'HTTP ' + r.status) + '. Check the PayPal settings on the server (client id, secret, sandbox/live).'); }
+    run('INSERT INTO deposits(ref,user_id,usd,currency,amount,created,provider,pid,save) VALUES(?,?,?,?,?,?,?,?,?)', ref, c.u.id, a, 'USD', amount, now(), 'paypal', j.id, useVault ? 1 : 0); return { url: link.href, saving: useVault };
   }
   if (route === 'stripe') {
     let cust = get('SELECT stripe_customer s FROM users WHERE id=?', c.u.id).s;
     if (!cust) { const cr = await fetch('https://api.stripe.com/v1/customers', { method: 'POST', headers: { Authorization: 'Bearer ' + STRIPE, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email: c.u.email, name: c.u.name, 'metadata[user_id]': String(c.u.id) }) }), cj = await cr.json().catch(() => ({})); if (cr.ok && cj.id) { cust = cj.id; run('UPDATE users SET stripe_customer=? WHERE id=?', cust, c.u.id); } }
-    const body = new URLSearchParams({ mode: 'payment', 'line_items[0][price_data][currency]': 'usd', 'line_items[0][price_data][product_data][name]': 'EasyTournament wallet top-up', 'line_items[0][price_data][unit_amount]': String(a), 'line_items[0][quantity]': '1', success_url: BASE + '/?paid=1', cancel_url: BASE + '/', client_reference_id: String(c.u.id), 'metadata[user_id]': String(c.u.id), 'metadata[cents]': String(a), ...(cust ? { customer: cust, 'saved_payment_method_options[payment_method_save]': 'enabled' } : {}) });
+    const body = new URLSearchParams({ mode: 'payment', 'line_items[0][price_data][currency]': 'usd', 'line_items[0][price_data][product_data][name]': 'EasyTournament wallet top-up', 'line_items[0][price_data][unit_amount]': String(a), 'line_items[0][quantity]': '1', success_url: origin + '/?paid=1', cancel_url: origin + '/', client_reference_id: String(c.u.id), 'metadata[user_id]': String(c.u.id), 'metadata[cents]': String(a), ...(cust ? { customer: cust, 'saved_payment_method_options[payment_method_save]': 'enabled' } : {}) });
     const r = await fetch('https://api.stripe.com/v1/checkout/sessions', { method: 'POST', headers: { Authorization: 'Bearer ' + STRIPE, 'Content-Type': 'application/x-www-form-urlencoded' }, body });
     const j = await r.json(); if (!r.ok) throw new HttpErr(502, 'Payment provider error'); return { url: j.url };
   }
@@ -417,15 +419,16 @@ R('POST', '/api/leagues/:code/mode', c => {
 R('POST', '/api/leagues/:code/join', c => {
   const r = league(c.p.code, c.u.id); if (!r.mode) throw new HttpErr(400, 'Registration is not open yet'); if (r.status !== 'open' || JSON.parse(r.data).started) throw new HttpErr(400, 'This league has already started');
   if (isMember(r.code, c.u.id)) throw new HttpErr(400, 'You already joined');
-  if (r.mode === 'money') { needSigned(c.u); if (!get('SELECT 1 x FROM slots WHERE code=? AND user_id IS NULL', r.code)) throw new HttpErr(400, 'No open teams left in this league'); checkPin(c.u, c.b.pin); }
+  if (!get('SELECT 1 x FROM slots WHERE code=? AND user_id IS NULL', r.code)) throw new HttpErr(400, r.mode === 'money' ? 'No open teams left in this league' : 'No open teams left. Ask the admin to add your team.');
+  if (r.mode === 'money') { needSigned(c.u); checkPin(c.u, c.b.pin); }
   tx(() => { addMember(r.code, c.u, r.mode === 'money'); if (r.mode === 'money') move('user:' + c.u.id, 'league:' + r.code, r.fee, 'league_fee', r.code, 'League fee: ' + JSON.parse(r.data).n); });
   return view(get('SELECT * FROM leagues WHERE code=?', r.code), c.u.id, 'full');
 });
-R('PATCH', '/api/leagues/:code/team', c => { const r = league(c.p.code, c.u.id, 'member'); if (!['open', 'active'].includes(r.status)) throw new HttpErr(400, 'Teams are locked'); if (r.mode === 'money') run('UPDATE slots SET logo=? WHERE code=? AND user_id=?', okLogo(c.b.logo), r.code, c.u.id); else run('UPDATE members SET team=?,logo=? WHERE code=? AND user_id=?', str(c.b.team, 30), okLogo(c.b.logo), r.code, c.u.id); return { ok: true }; });
+R('PATCH', '/api/leagues/:code/team', c => { const r = league(c.p.code, c.u.id, 'member'); if (!['open', 'active'].includes(r.status)) throw new HttpErr(400, 'Teams are locked'); if (r.mode) run('UPDATE slots SET logo=? WHERE code=? AND user_id=?', okLogo(c.b.logo), r.code, c.u.id); else run('UPDATE members SET team=?,logo=? WHERE code=? AND user_id=?', str(c.b.team, 30), okLogo(c.b.logo), r.code, c.u.id); return { ok: true }; });
 R('POST', '/api/leagues/:code/remove', c => {
   const r = league(c.p.code, c.u.id, 'admin'); if (r.status !== 'open' || JSON.parse(r.data).started) throw new HttpErr(400, 'Teams cannot be removed after fixtures are created');
   const id = sidf2(r, c.u.id)(c.b.id);
-  tx(() => { if (r.mode === 'money') { const x = get('SELECT * FROM slots WHERE code=? AND id=?', r.code, id); if (!x) throw new HttpErr(404, 'Team not found'); if (x.user_id) refund(r.code, x.user_id, 'Removed from league'); run('DELETE FROM slots WHERE code=? AND id=?', r.code, id); } else refund(r.code, +String(id).slice(1), 'Removed from league'); }); return view(get('SELECT * FROM leagues WHERE code=?', r.code), c.u.id, 'full');
+  tx(() => { if (r.mode) { const x = get('SELECT * FROM slots WHERE code=? AND id=?', r.code, id); if (!x) throw new HttpErr(404, 'Team not found'); if (x.user_id) refund(r.code, x.user_id, 'Removed from league'); run('DELETE FROM slots WHERE code=? AND id=?', r.code, id); } else refund(r.code, +String(id).slice(1), 'Removed from league'); }); return view(get('SELECT * FROM leagues WHERE code=?', r.code), c.u.id, 'full');
 });
 R('POST', '/api/leagues/:code/cancel', c => {   // admin may cancel only BEFORE fixtures exist; afterwards only support can
   const r = league(c.p.code, c.u.id, 'admin'); if (r.status !== 'open' || JSON.parse(r.data).started) throw new HttpErr(403, 'After the league starts, only support can cancel it');
@@ -443,7 +446,7 @@ R('POST', '/api/leagues/:code/finish', c => {
   return view(get('SELECT * FROM leagues WHERE code=?', r.code), c.u.id, 'full');
 });
 R('POST', '/api/leagues/:code/slots', c => {   // admin lists the team names players can pick (money leagues)
-  const r = league(c.p.code, c.u.id, 'admin'); if (r.mode !== 'money') throw new HttpErr(400, 'Team slots are used in money leagues');
+  const r = league(c.p.code, c.u.id, 'admin'); if (!r.mode) throw new HttpErr(400, 'Choose the league type first');
   if (r.status !== 'open' || JSON.parse(r.data).started) throw new HttpErr(400, 'Teams cannot be added after fixtures are created');
   const t = str(c.b.team, 30); if (!t) throw new HttpErr(400, 'Enter a team name');
   if (get('SELECT COUNT(*) c FROM slots WHERE code=?', r.code).c >= 64) throw new HttpErr(400, 'League is full');
@@ -452,7 +455,7 @@ R('POST', '/api/leagues/:code/slots', c => {   // admin lists the team names pla
   return view(get('SELECT * FROM leagues WHERE code=?', r.code), c.u.id, 'full');
 });
 R('POST', '/api/leagues/:code/pick', c => {   // a player who has paid taps the tick next to their team
-  const r = league(c.p.code, c.u.id, 'member'); if (r.mode !== 'money') throw new HttpErr(400, 'Not a money league'); if (!['open', 'active'].includes(r.status)) throw new HttpErr(400, 'League is closed');
+  const r = league(c.p.code, c.u.id, 'member'); if (!r.mode) throw new HttpErr(400, 'Registration is not open yet'); if (!['open', 'active'].includes(r.status)) throw new HttpErr(400, 'League is closed');
   if (JSON.parse(r.data).started && mySlot(r.code, c.u.id)) throw new HttpErr(400, 'Your team is locked once fixtures are created');
   const id = String(c.b.slot || '');
   tx(() => {
