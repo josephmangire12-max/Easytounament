@@ -9,6 +9,7 @@ const REVIEW_MS = +E.REVIEW_MS || 24 * 3600 * 1000;      // complaint window bef
 const TICK_MS = +E.TICK_MS || 30000, BASE = (E.PUBLIC_URL || '').trim().replace(/\/$/, '');
 const SUPPORT = (E.SUPPORT_KEY || '').trim(), STRIPE = (E.STRIPE_SECRET_KEY || '').trim(), WH = (E.STRIPE_WEBHOOK_SECRET || '').trim();
 const CALL_MS = +E.CALL_MS || 15000;
+const OAI_KEY = (E.OPENAI_API_KEY || '').trim(), OAI_BASE = (E.OPENAI_API_BASE || 'https://api.openai.com/v1').trim().replace(/\/$/, ''), OAI_MODEL = (E.OPENAI_IMAGE_MODEL || 'gpt-image-1').trim(), AI_LIMIT = +E.AI_DAILY_LIMIT || 8;
 const SB_URL = ((E.SUPABASE_URL || '').trim()).replace(/\/$/, ''), SB_KEY = (E.SUPABASE_PUBLISHABLE_KEY || '').trim(), JWKS_URL = E.SUPABASE_JWKS_URL || (SB_URL ? SB_URL + '/auth/v1/.well-known/jwks.json' : '');
 const AUTH_LOCAL = E.AUTH_LOCAL !== undefined ? E.AUTH_LOCAL === '1' : !SB_URL;      // local email+password only when Supabase is not configured
 const ADS_CLIENT = E.ADSENSE_CLIENT || '', ADS_SLOT = E.ADSENSE_SLOT || '';
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS complaints(id INTEGER PRIMARY KEY,code TEXT,user_id I
 CREATE TABLE IF NOT EXISTS chat(id INTEGER PRIMARY KEY,code TEXT,user_id INTEGER,author TEXT,body TEXT,created INTEGER);
 CREATE TABLE IF NOT EXISTS withdrawals(id INTEGER PRIMARY KEY,user_id INTEGER,cents INTEGER,method TEXT,dest TEXT,status TEXT DEFAULT 'pending',created INTEGER);
 CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS ai_usage(user_id INTEGER,day TEXT,n INTEGER DEFAULT 0,PRIMARY KEY(user_id,day));
 CREATE TABLE IF NOT EXISTS saved_methods(id INTEGER PRIMARY KEY,user_id INTEGER,provider TEXT,kind TEXT,label TEXT,token TEXT,meta TEXT,created INTEGER,UNIQUE(user_id,token));
 CREATE TABLE IF NOT EXISTS push_subs(id INTEGER PRIMARY KEY,user_id INTEGER,endpoint TEXT UNIQUE,p256dh TEXT,auth TEXT,created INTEGER);
 CREATE TABLE IF NOT EXISTS slots(code TEXT,id TEXT,team TEXT,logo TEXT,user_id INTEGER,PRIMARY KEY(code,id));
@@ -198,7 +200,7 @@ function league(code, uid, need) {
 }
 const evs = a => (Array.isArray(a) ? a : []).slice(0, 30).map(e => ({ t: ['goal', 'assist', 'yellow', 'red', 'own', 'note'].includes(e && e.t) ? e.t : 'note', p: str(e && e.p, 30), min: Math.max(0, Math.min(130, (e && e.min) | 0)), s: e && e.s === 'a' ? 'a' : 'h' }));
 const num = v => (v === null || v === '' || v === undefined) ? null : Math.max(0, Math.min(999, Math.round(Number(v) * 2) / 2)) || 0;
-const okLogo = s => typeof s === 'string' && s.length < 150000 && (s === '' || /^data:image\/(jpeg|png|svg\+xml)/.test(s)) ? s : '';
+const okLogo = s => typeof s === 'string' && s.length < 150000 && (s === '' || /^data:image\/(jpeg|png|webp|svg\+xml)/.test(s)) ? s : '';
 function saveLeague(r, b, uid) {
   const d = JSON.parse(r.data), sid = sidf2(r, uid), locked = ['review', 'finished', 'cancelled'].includes(r.status);
   if (!locked && !d.started) { d.n = str(b.n, 60) || d.n; d.g = str(b.g, 40) || d.g; d.d = str(b.d, 30); d.rules = str(b.rules, 600); d.fmt = ['league', 'group', 'ko', 'ffa'].includes(b.fmt) ? b.fmt : d.fmt; }
@@ -248,7 +250,7 @@ const routes = [];
 const R = (m, p, fn, auth = true) => routes.push({ m, re: new RegExp('^' + p.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), fn, auth });
 const meOut = u => ({ id: u.id, name: u.name, email: u.email, hasPin: !!u.pin, sig: u.sig_at ? { n: u.sig_name, d: fmtD(u.sig_at) } : null, balance: bal('user:' + u.id) / 100,
   tx: all('SELECT * FROM ledger WHERE account=? ORDER BY id DESC LIMIT 60', 'user:' + u.id).map(t => ({ t: t.note, a: t.cents / 100, m: t.kind, d: fmtD(t.created) })) });
-R('GET', '/api/health', c => ({ ok: true, payments: methodsList().map(x => x.id), paypal: PP ? (PPBASE.includes('sandbox') ? 'sandbox' : 'live') : 'off', returnUrlBase: BASE || (String(c.req.headers['x-forwarded-proto'] || 'http').split(',')[0] + '://' + c.req.headers.host), support: !!SUPPORT, production: PROD }), false);
+R('GET', '/api/health', c => ({ ok: true, payments: methodsList().map(x => x.id), paypal: PP ? (PPBASE.includes('sandbox') ? 'sandbox' : 'live') : 'off', aiLogos: !!OAI_KEY, returnUrlBase: BASE || (String(c.req.headers['x-forwarded-proto'] || 'http').split(',')[0] + '://' + c.req.headers.host), support: !!SUPPORT, production: PROD }), false);
 R('POST', '/api/signup', c => {
   if (!AUTH_LOCAL) throw new HttpErr(404, 'Use the sign-in page'); limit(c.ip); const e = str(c.b.email, 120).toLowerCase(), n = str(c.b.name, 40), p = String(c.b.password || '');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new HttpErr(400, 'Enter a valid email'); if (n.length < 2) throw new HttpErr(400, 'Enter your name'); if (p.length < 8) throw new HttpErr(400, 'Password needs 8+ characters');
@@ -361,6 +363,32 @@ R('POST', '/api/paypal/webhook', async c => {
   const j = await r.json().catch(() => ({})); if (!r.ok || j.verification_status !== 'SUCCESS') throw new HttpErr(400, 'Bad signature');
   const ref = c.b.resource && c.b.resource.custom_id; if (c.b.event_type === 'PAYMENT.CAPTURE.COMPLETED' && ref && get('SELECT 1 x FROM deposits WHERE ref=?', String(ref))) await ppConfirm(String(ref)); return { received: true };
 }, false);
+// AI logos (OpenAI Images). The API key stays on the server; each user has a daily limit.
+R('POST', '/api/ai/logo', async c => {
+  if (!OAI_KEY) throw new HttpErr(503, 'AI logos are not enabled on this server yet');
+  const mode = c.b.mode === 'edit' ? 'edit' : 'generate', name = str(c.b.name, 40), extra = str(c.b.prompt, 200);
+  if (!extra && mode === 'edit') throw new HttpErr(400, 'Describe the change you want');
+  const day = new Date().toISOString().slice(0, 10), used = (get('SELECT n FROM ai_usage WHERE user_id=? AND day=?', c.u.id, day) || { n: 0 }).n;
+  if (used >= AI_LIMIT) throw new HttpErr(429, 'Daily AI logo limit reached (' + AI_LIMIT + '). Try again tomorrow.');
+  const base = 'Original emblem-style logo for a sports team or tournament' + (name ? ' called "' + name + '"' : '') + '. Bold colours, simple centered shapes, clean vector look, transparent background, no watermark. Do not copy any real club, league, brand or trademark.';
+  const prompt = mode === 'edit' ? 'Edit this logo: ' + extra + '. Keep it a clean emblem on a transparent background. Do not add real brand marks.' : base + (extra ? ' Style and idea: ' + extra : '');
+  let r;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 95000);
+  try {
+    if (mode === 'edit') {
+      const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(c.b.image || '')); if (!m || m[2].length > 400000) throw new HttpErr(400, 'Upload or create a logo first');
+      const fd = new FormData(); fd.append('model', OAI_MODEL); fd.append('prompt', prompt); fd.append('size', '1024x1024'); fd.append('image', new Blob([Buffer.from(m[2], 'base64')], { type: 'image/' + m[1] }), 'logo.' + (m[1] === 'jpeg' ? 'jpg' : m[1]));
+      r = await fetch(OAI_BASE + '/images/edits', { method: 'POST', headers: { Authorization: 'Bearer ' + OAI_KEY }, body: fd, signal: ctl.signal });
+    } else {
+      const body = OAI_MODEL.startsWith('gpt-image') ? { model: OAI_MODEL, prompt, size: '1024x1024', quality: 'low', background: 'transparent', output_format: 'png', n: 1 } : { model: OAI_MODEL, prompt, size: '1024x1024', response_format: 'b64_json', n: 1 };
+      r = await fetch(OAI_BASE + '/images/generations', { method: 'POST', headers: { Authorization: 'Bearer ' + OAI_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
+    }
+  } catch (e) { if (e instanceof HttpErr) throw e; throw new HttpErr(504, 'The AI took too long. Please try again.'); } finally { clearTimeout(timer); }
+  const j = await r.json().catch(() => ({})), b64 = j.data && j.data[0] && j.data[0].b64_json;
+  if (!r.ok || !b64) { console.error('OpenAI image error', r.status, JSON.stringify(j).slice(0, 400)); throw new HttpErr(r.status === 400 ? 400 : 502, 'AI could not make this logo: ' + ((j.error && j.error.message) || 'HTTP ' + r.status)); }
+  run('INSERT INTO ai_usage(user_id,day,n) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET n=n+1', c.u.id, day);
+  return { image: 'data:image/png;base64,' + b64, left: AI_LIMIT - used - 1 };
+});
 R('GET', '/api/wallet/saved', c => ({ saved: all('SELECT id,kind,label,provider FROM saved_methods WHERE user_id=? ORDER BY id DESC', c.u.id) }));
 R('DELETE', '/api/wallet/saved/:id', async c => {
   const sm = get('SELECT * FROM saved_methods WHERE id=? AND user_id=?', +c.p.id, c.u.id); if (!sm) throw new HttpErr(404, 'Not found');
