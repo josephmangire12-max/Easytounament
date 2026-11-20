@@ -8,7 +8,7 @@ const DEMO = E.DEMO_MONEY === '1';                       // test deposits withou
 const REVIEW_MS = +E.REVIEW_MS || 24 * 3600 * 1000;      // complaint window before prizes are released
 const TICK_MS = +E.TICK_MS || 30000, BASE = (E.PUBLIC_URL || '').trim().replace(/\/$/, '');
 const SUPPORT = (E.SUPPORT_KEY || '').trim(), STRIPE = (E.STRIPE_SECRET_KEY || '').trim(), WH = (E.STRIPE_WEBHOOK_SECRET || '').trim();
-const CALL_MS = +E.CALL_MS || 15000;
+const CALL_MS = +E.CALL_MS || 15000, VERSION = '2026-11-20.7';
 const OAI_KEY = (E.OPENAI_API_KEY || '').trim(), OAI_BASE = (E.OPENAI_API_BASE || 'https://api.openai.com/v1').trim().replace(/\/$/, ''), OAI_MODEL = (E.OPENAI_IMAGE_MODEL || 'gpt-image-1').trim(), AI_LIMIT = +E.AI_DAILY_LIMIT || 8;
 const SB_URL = ((E.SUPABASE_URL || '').trim()).replace(/\/$/, ''), SB_KEY = (E.SUPABASE_PUBLISHABLE_KEY || '').trim(), JWKS_URL = E.SUPABASE_JWKS_URL || (SB_URL ? SB_URL + '/auth/v1/.well-known/jwks.json' : '');
 const AUTH_LOCAL = E.AUTH_LOCAL !== undefined ? E.AUTH_LOCAL === '1' : !SB_URL;      // local email+password only when Supabase is not configured
@@ -250,7 +250,7 @@ const routes = [];
 const R = (m, p, fn, auth = true) => routes.push({ m, re: new RegExp('^' + p.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), fn, auth });
 const meOut = u => ({ id: u.id, name: u.name, email: u.email, hasPin: !!u.pin, sig: u.sig_at ? { n: u.sig_name, d: fmtD(u.sig_at) } : null, balance: bal('user:' + u.id) / 100,
   tx: all('SELECT * FROM ledger WHERE account=? ORDER BY id DESC LIMIT 60', 'user:' + u.id).map(t => ({ t: t.note, a: t.cents / 100, m: t.kind, d: fmtD(t.created) })) });
-R('GET', '/api/health', c => ({ ok: true, payments: methodsList().map(x => x.id), paypal: PP ? (PPBASE.includes('sandbox') ? 'sandbox' : 'live') : 'off', aiLogos: !!OAI_KEY, returnUrlBase: BASE || (String(c.req.headers['x-forwarded-proto'] || 'http').split(',')[0] + '://' + c.req.headers.host), support: !!SUPPORT, production: PROD }), false);
+R('GET', '/api/health', c => ({ ok: true, payments: methodsList().map(x => x.id), paypal: PP ? (PPBASE.includes('sandbox') ? 'sandbox' : 'live') : 'off', aiLogos: !!OAI_KEY, version: VERSION, returnUrlBase: BASE || (String(c.req.headers['x-forwarded-proto'] || 'http').split(',')[0] + '://' + c.req.headers.host), support: !!SUPPORT, production: PROD }), false);
 R('POST', '/api/signup', c => {
   if (!AUTH_LOCAL) throw new HttpErr(404, 'Use the sign-in page'); limit(c.ip); const e = str(c.b.email, 120).toLowerCase(), n = str(c.b.name, 40), p = String(c.b.password || '');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new HttpErr(400, 'Enter a valid email'); if (n.length < 2) throw new HttpErr(400, 'Enter your name'); if (p.length < 8) throw new HttpErr(400, 'Password needs 8+ characters');
@@ -263,7 +263,7 @@ R('POST', '/api/login', c => {
   if (!u || !eq(scrypt(c.b.password || '', u.salt), u.pw)) throw new HttpErr(401, 'Wrong email or password'); return { token: newSession(u.id) };
 }, false);
 R('POST', '/api/logout', c => { const t = /[a-f0-9]{48}/.exec(c.req.headers.authorization || ''); if (t && !/\./.test(c.req.headers.authorization)) run('DELETE FROM sessions WHERE h=?', sha(t[0])); return { ok: true }; });
-R('GET', '/api/config', () => ({ supabaseUrl: SB_URL, publishableKey: SB_KEY, authLocal: AUTH_LOCAL, vapidPublicKey: VAPID.pub, ads: ADS_CLIENT ? { client: ADS_CLIENT, slot: ADS_SLOT } : null }), false);
+R('GET', '/api/config', () => ({ version: VERSION, supabaseUrl: SB_URL, publishableKey: SB_KEY, authLocal: AUTH_LOCAL, vapidPublicKey: VAPID.pub, ads: ADS_CLIENT ? { client: ADS_CLIENT, slot: ADS_SLOT } : null }), false);
 R('GET', '/api/public', () => all('SELECT * FROM leagues ORDER BY created DESC LIMIT 100').map(r => view(r, 0, 'light')), false);
 R('POST', '/api/push/subscribe', c => {
   const sub = c.b.subscription || c.b, ep = String(sub.endpoint || ''), k = sub.keys || {};

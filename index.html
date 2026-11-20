@@ -173,7 +173,7 @@ function toast(t){var e=$("toast");e.textContent=t;e.style.display="block";clear
 function seg(items,cur,act,cls){return '<div class="seg">'+items.map(function(x){return '<button data-a="'+act+'" data-v="'+esc(x[0])+'" class="'+(cur===x[0]?"on "+(cls||""):"")+'">'+esc(x[1])+'</button>'}).join("")+'</div>'}
 function card(l,top){var h=0;for(var i=0;i<l.n.length;i++)h+=l.n.charCodeAt(i);
   return '<div class="lg'+(top?" top":"")+'" data-a="open" data-v="'+esc(l.c)+'" style="cursor:pointer">'+(l.logo?'<img src="'+l.logo+'" alt="" class="av" style="object-fit:cover;background:#fff">':'<div class="av" style="background:'+COL[h%6]+'">'+esc(l.n.slice(0,2).toUpperCase())+'</div>')+'<div class="lb"><div class="lt"><b>'+esc(l.n)+'</b><span class="code">'+esc(l.c)+'</span></div><div class="tags"><span class="tag '+l.st+'">'+l.st+'</span><span class="tag">'+esc(l.g)+'</span>'+(l.q?'<span class="tag">🏆 '+esc(l.q)+'</span>':'')+'</div><div class="meta"><span>👥 '+esc(l.p)+'</span><span>📅 '+esc(l.d)+'</span></div></div></div>'}
-function list(){var q=hs.toLowerCase();return D.leagues.filter(function(l){return(hm==="all"||l.mine)&&(hf==="All"||l.g===hf)&&l.n.toLowerCase().indexOf(q)>-1}).map(function(l,i){return card(l,hm==="mine"&&i===0)}).join("")||'<p class="empty">No leagues found</p>'}
+function list(){var q=hs.toLowerCase();return D.leagues.filter(function(l){return(hm==="all"||l.mine)&&(hf==="All"||l.g===hf)&&l.n.toLowerCase().indexOf(q)>-1}).map(function(l,i){return card(l,hm==="mine"&&i===0)}).join("")||'<div class="card empty" style="margin-top:6px"><div style="font-size:40px">🏆</div><b style="color:var(--ink)">No leagues yet</b><br>Tap Create New League, or join a friend with a league code.</div>'}
 function home(){var my=D.leagues.filter(function(l){return l.mine}).length,ac=D.leagues.filter(function(l){return l.st==="Active"}).length;
   return '<h1>Hello, '+esc(D.name.split(" ")[0])+' 👋</h1><p class="sub">Plan and manage your tournaments</p><div class="ad">📢 Ad space – go Premium to remove ads</div>'+
   '<div class="stats"><div class="stat"><b>'+my+'</b><span>My Leagues</span></div><div class="stat"><b>'+ac+'</b><span>Active</span></div><div class="stat"><b>'+D.leagues.length+'</b><span>All</span></div></div>'+
@@ -768,6 +768,9 @@ mrow=function(l,m,i,dis){var a=pl(l,m.h),b=m.a?pl(l,m.a):null;if(!a)return '';va
   var evs=evSum(m);
   return '<div class="mc'+(done?' done':'')+'">'+(info?'<div class="minfo">'+info+'</div>':'')+head+mid+(done?'<div class="msaved">✓ Result saved</div>':(dis?'':'<div class="mhint">'+(k==='res'?'Tap the result':'Type both scores. The result saves by itself.')+'</div>'))+(evs?'<div class="mev">'+evs+'</div>':'')+'<div class="macts">'+acts+'</div></div>'};
 
+
+var BUILD='2026-11-20.7';
+var _set9=set;set=function(){return _set9()+'<p class="meta" style="text-align:center;margin:18px 0">EasyTournament \u00b7 design '+BUILD+'</p>'};
 /* ===== SERVER MODE: accounts, wallet, escrow and league sync go through the server ===== */
 var JN=(new URLSearchParams(location.search).get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,''),TOK=null,RT=null,EXP=0,CFG={},GUEST=false,PUSHON=false,LSAVE=0,LASTP={},LASTT={},SPC=null,pushT=null;
 try{TOK=localStorage.getItem('et_tok');RT=localStorage.getItem('et_rt')||null;EXP=+localStorage.getItem('et_exp')||0}catch(e){}
@@ -953,6 +956,8 @@ INT.tai=function(){var l=Lg(),p=l&&pl(l,LTID);if(!p){toast('Pick a team first');
 INT.aigen=function(){aiRun('generate')};INT.aiedit=function(){aiRun('edit')};
 INT.aiuse=function(){if(AIR&&AIS)AIS.apply(AIR)};
 INT.aichip=function(b){var t=$('aip');t.value=(t.value?t.value+', ':'')+b.dataset.v.toLowerCase()};
+
+var _set10=set;set=function(){return _set10()+(CFG.version?'<p class="meta" style="text-align:center;margin:-10px 0 18px">Server '+esc(CFG.version)+'</p>':'')};
 
 document.addEventListener("input",function(e){if(e.target.id==="hs"){hs=e.target.value;$("hl").innerHTML=list()}});
 render();
