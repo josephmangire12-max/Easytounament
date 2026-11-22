@@ -1,0 +1,12 @@
+# Railway (Nixpacks): use Node 22 (the built-in SQLite needs 22.13 or newer) and start the server directly.
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["echo no dependencies to install"]
+
+[phases.build]
+cmds = ["echo no build step"]
+
+[start]
+cmd = "node server.js"

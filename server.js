@@ -8,7 +8,7 @@ const DEMO = E.DEMO_MONEY === '1';                       // test deposits withou
 const REVIEW_MS = +E.REVIEW_MS || 24 * 3600 * 1000;      // complaint window before prizes are released
 const TICK_MS = +E.TICK_MS || 30000, BASE = (E.PUBLIC_URL || '').trim().replace(/\/$/, '');
 const SUPPORT = (E.SUPPORT_KEY || '').trim(), STRIPE = (E.STRIPE_SECRET_KEY || '').trim(), WH = (E.STRIPE_WEBHOOK_SECRET || '').trim();
-const CALL_MS = +E.CALL_MS || 15000, VERSION = '2026-11-20.7';
+const CALL_MS = +E.CALL_MS || 15000, VERSION = '2026-11-20.8';
 const OAI_KEY = (E.OPENAI_API_KEY || '').trim(), OAI_BASE = (E.OPENAI_API_BASE || 'https://api.openai.com/v1').trim().replace(/\/$/, ''), OAI_MODEL = (E.OPENAI_IMAGE_MODEL || 'gpt-image-1').trim(), AI_LIMIT = +E.AI_DAILY_LIMIT || 8;
 const SB_URL = ((E.SUPABASE_URL || '').trim()).replace(/\/$/, ''), SB_KEY = (E.SUPABASE_PUBLISHABLE_KEY || '').trim(), JWKS_URL = E.SUPABASE_JWKS_URL || (SB_URL ? SB_URL + '/auth/v1/.well-known/jwks.json' : '');
 const AUTH_LOCAL = E.AUTH_LOCAL !== undefined ? E.AUTH_LOCAL === '1' : !SB_URL;      // local email+password only when Supabase is not configured
@@ -612,7 +612,7 @@ http.createServer(async (req, res) => {
       const f = backup(); res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="easytournament.db"' }); return fs.createReadStream(f).pipe(res);
     }
     if (req.method === 'GET' && STATIC[p]) { res.writeHead(200, { 'Content-Type': STATIC[p][0], 'X-Content-Type-Options': 'nosniff', ...STATIC[p][1] }); return fs.createReadStream(path.join(__dirname, STATIC[p][2])).pipe(res); }
-    if (req.method === 'GET' && (p === '/' || /^\/l\/[A-Za-z0-9]+$/.test(p))) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', ...(PROD ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}), 'Content-Security-Policy': csp() }); return res.end(fs.readFileSync(INDEX)); }
+    if (req.method === 'GET' && (p === '/' || /^\/l\/[A-Za-z0-9]+$/.test(p))) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', ...(PROD ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}), 'Content-Security-Policy': csp() }); return res.end(fs.readFileSync(INDEX)); }
     const ip = req.socket.remoteAddress || '';
     if (req.method === 'POST' && p === '/api/videos/upload') return await uploadVideo(req, res, url, send);
     const vm = /^\/api\/videos\/([a-f0-9]{24})\/file$/.exec(p); if (req.method === 'GET' && vm) return serveVideo(req, res, vm[1]);

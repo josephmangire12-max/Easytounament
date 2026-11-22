@@ -769,7 +769,7 @@ mrow=function(l,m,i,dis){var a=pl(l,m.h),b=m.a?pl(l,m.a):null;if(!a)return '';va
   return '<div class="mc'+(done?' done':'')+'">'+(info?'<div class="minfo">'+info+'</div>':'')+head+mid+(done?'<div class="msaved">✓ Result saved</div>':(dis?'':'<div class="mhint">'+(k==='res'?'Tap the result':'Type both scores. The result saves by itself.')+'</div>'))+(evs?'<div class="mev">'+evs+'</div>':'')+'<div class="macts">'+acts+'</div></div>'};
 
 
-var BUILD='2026-11-20.7';
+var BUILD='2026-11-20.8';
 var _set9=set;set=function(){return _set9()+'<p class="meta" style="text-align:center;margin:18px 0">EasyTournament \u00b7 design '+BUILD+'</p>'};
 /* ===== SERVER MODE: accounts, wallet, escrow and league sync go through the server ===== */
 var JN=(new URLSearchParams(location.search).get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,''),TOK=null,RT=null,EXP=0,CFG={},GUEST=false,PUSHON=false,LSAVE=0,LASTP={},LASTT={},SPC=null,pushT=null;
